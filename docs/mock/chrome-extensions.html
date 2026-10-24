@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>扩展管理页 · 文档配图</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+  body { background: #F1F3F4; }
+  .cx-head {
+    height: 56px; background: #F1F3F4; display: flex; align-items: center;
+    padding: 0 26px; gap: 12px; font-size: 15px; font-weight: 500; color: #202124;
+  }
+  .cx-head .burger { width: 18px; height: 2px; background: #5F6368; position: relative; }
+  .cx-head .burger::before, .cx-head .burger::after {
+    content: ""; position: absolute; left: 0; width: 18px; height: 2px; background: #5F6368;
+  }
+  .cx-head .burger::before { top: -6px; }
+  .cx-head .burger::after { top: 6px; }
+
+  .cx-bar { display: flex; align-items: center; gap: 14px; padding: 0 26px 18px; }
+  .cx-search {
+    width: 300px; height: 34px; border-radius: 17px; background: #E8EAED;
+    display: flex; align-items: center; padding: 0 14px; font-size: 13px; color: #80868B;
+  }
+  .cx-dev {
+    display: flex; align-items: center; gap: 8px; font-size: 13px; color: #3C4043;
+    margin-left: auto; position: relative;
+  }
+  .cx-sw { width: 34px; height: 18px; border-radius: 9px; background: #1A73E8; position: relative; }
+  .cx-sw::after {
+    content: ""; position: absolute; right: 2px; top: 2px; width: 14px; height: 14px;
+    border-radius: 50%; background: #fff;
+  }
+  .cx-btn {
+    height: 32px; padding: 0 14px; border-radius: 4px; background: #fff;
+    border: 1px solid #DADCE0; font-size: 13px; color: #1A73E8; font-weight: 500;
+    display: inline-flex; align-items: center;
+  }
+  .cx-btn.primary { background: #1A73E8; border-color: #1A73E8; color: #fff; }
+
+  .cx-grid {
+    padding: 6px 26px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+    max-width: 940px;
+  }
+  .cx-card {
+    background: #fff; border-radius: 10px; padding: 16px 18px; display: flex; gap: 14px;
+    box-shadow: 0 1px 2px rgba(60,64,67,.08);
+  }
+  .cx-card .ic {
+    width: 42px; height: 42px; border-radius: 8px; background: #2383E2; flex: none;
+    display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px;
+  }
+  .cx-card .ic.gray { background: #E8EAED; color: #9AA0A6; }
+  .cx-card h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: #202124; }
+  .cx-card p { margin: 0 0 8px; font-size: 12px; color: #5F6368; line-height: 1.5; }
+  .cx-card .meta { font-size: 11.5px; color: #80868B; }
+  .cx-card .act { margin-top: 10px; display: flex; gap: 14px; font-size: 12px; color: #1A73E8; }
+  .cx-card .act .off { color: #5F6368; }
+
+  /* 高亮标注 */
+  .ring {
+    position: absolute; border: 2px dashed #E8710A; border-radius: 8px;
+    box-shadow: 0 0 0 4px rgba(232,113,10,.10); pointer-events: none;
+  }
+  .badge {
+    position: absolute; width: 20px; height: 20px; border-radius: 50%;
+    background: #E8710A; color: #fff; font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; pointer-events: none;
+  }
+  .note {
+    position: absolute; left: 26px; bottom: 24px; font-size: 12px; color: #80868B;
+  }
+</style>
+</head>
+<body>
+
+<div class="cx-head"><span class="burger"></span><span>扩展程序</span></div>
+
+<div class="cx-bar">
+  <div class="cx-search">搜索扩展程序</div>
+  <div style="position:relative">
+    <div class="ring" style="left:-16px;right:-14px;top:-9px;bottom:-9px"></div>
+    <div class="badge" style="left:-28px;top:-20px">1</div>
+    <div class="cx-dev">开发者模式<span class="cx-sw"></span></div>
+  </div>
+  <div style="position:relative; margin-left: 10px;">
+    <div class="ring" style="left:-10px;right:-10px;top:-7px;bottom:-7px"></div>
+    <div class="badge" style="left:-10px;top:-30px">2</div>
+    <div class="cx-btn primary">加载已解压的扩展程序</div>
+  </div>
+  <div class="cx-btn">打包扩展程序</div>
+  <div class="cx-btn">更新</div>
+</div>
+
+<div class="cx-grid">
+  <div class="cx-card">
+    <div class="ic">⚡</div>
+    <div style="flex:1">
+      <h4>一键投 Boss</h4>
+      <p>在 BOSS 直聘批量投递、自动沟通。纯本地运行，零服务器。</p>
+      <div class="meta">版本 1.0.10 · 已加载解压缩的扩展程序</div>
+      <div class="act"><span>详情</span><span>移除</span><span class="off">在 Chrome 菜单中固定</span></div>
+    </div>
+    <div class="cx-sw" style="margin-top:2px"></div>
+  </div>
+
+  <div class="cx-card">
+    <div class="ic gray">▤</div>
+    <div style="flex:1">
+      <h4>其他扩展</h4>
+      <p>这里是这台浏览器上已安装的其它扩展，与本项目无关。</p>
+      <div class="meta">版本 1.x · Chrome 应用商店</div>
+      <div class="act"><span>详情</span><span>移除</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="note">示意图：在 <b>chrome://extensions</b> 打开「开发者模式」后，才会出现「加载已解压的扩展程序」按钮。</div>
+
+</body>
+</html>

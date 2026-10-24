@@ -9,6 +9,7 @@
 !/LICENSE
 !/boss-haitu-free/
 !/tools/
+!/docs/
 
 # 扩展内部的本地备份，不进仓库
 /boss-haitu-free/.backup/

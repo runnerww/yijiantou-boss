@@ -1,0 +1,50 @@
+/* 文档配图专用：模拟 BOSS 职位列表页的背景，仅用于截图，与实际平台无关 */
+html, body { margin: 0; padding: 0; }
+body {
+  background: #F5F6F8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  color: #1F2329;
+  -webkit-font-smoothing: antialiased;
+}
+
+.zp-top {
+  height: 60px; background: #fff; border-bottom: 1px solid #EBEDF0;
+  display: flex; align-items: center; gap: 24px; padding: 0 28px;
+}
+.zp-logo { font-size: 17px; font-weight: 700; color: #00A6A7; letter-spacing: .5px; }
+.zp-logo i { font-style: normal; color: #1F2329; font-weight: 500; font-size: 13px; margin-left: 6px; }
+.zp-search {
+  flex: 1; max-width: 430px; height: 34px; border: 1px solid #E4E6EB; border-radius: 6px;
+  display: flex; align-items: center; padding: 0 12px; color: #9AA0A8; font-size: 13px;
+  background: #FAFBFC;
+}
+.zp-search b { color: #1F2329; font-weight: 500; margin-right: 2px; }
+.zp-nav { margin-left: auto; display: flex; gap: 22px; font-size: 13px; color: #6B7280; }
+
+.zp-wrap { display: flex; gap: 16px; padding: 16px 28px 0; align-items: flex-start; }
+.zp-side { width: 150px; flex: none; }
+.zp-side div {
+  font-size: 13px; color: #6B7280; padding: 7px 10px; border-radius: 6px; margin-bottom: 2px;
+}
+.zp-side div.on { background: #E9F7F7; color: #00A6A7; font-weight: 500; }
+
+.zp-list { flex: 1; }
+.zp-job {
+  background: #fff; border: 1px solid #EEEFF1; border-radius: 10px;
+  padding: 16px 18px; margin-bottom: 10px;
+}
+.zp-job-hd { display: flex; align-items: baseline; gap: 10px; }
+.zp-job-hd strong { font-size: 15px; font-weight: 600; }
+.zp-job-hd .sal { margin-left: auto; font-size: 15px; font-weight: 600; color: #00A6A7; }
+.zp-job-meta { font-size: 12px; color: #8A9099; margin-top: 7px; }
+.zp-job-meta span + span::before { content: "·"; margin: 0 6px; color: #D2D6DB; }
+.zp-job-co { font-size: 12px; color: #6B7280; margin-top: 8px; display: flex; gap: 8px; align-items: center; }
+.zp-job-co em { font-style: normal; color: #9AA0A8; }
+.zp-hr { margin-left: auto; font-size: 12px; color: #8A9099; }
+.zp-hr b { color: #00A6A7; font-weight: 500; margin-right: 4px; }
+.zp-tag {
+  display: inline-block; font-size: 11px; color: #6B7280; background: #F4F5F7;
+  border-radius: 3px; padding: 1px 6px; margin-top: 10px; margin-right: 6px;
+}
+body.shot-dim .zp-wrap { opacity: .55; }
