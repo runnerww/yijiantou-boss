@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "一键投 Boss",
+  "version": "1.0.10",
+  "description": "在 BOSS 直聘网页上批量一键投递:自动打招呼、发送招呼语、自动发简历、按招聘者状态筛选。数据全部保存在本地。",
+  "author": "王智纬/wangzhiwei",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "activeTab",
+    "alarms",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.zhipin.com/*"
+  ],
+  "action": {
+    "default_title": "一键投 Boss(点击显示/隐藏面板)",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.zhipin.com/web/*"
+      ],
+      "js": [
+        "common/constants.js",
+        "content/app.js"
+      ],
+      "css": [
+        "content/app.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

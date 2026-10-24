@@ -1,0 +1,23 @@
+# 本仓库只发布「一键投 Boss」扩展本体。
+# 采用「白名单」写法：先全部忽略，再逐个放行 ——
+# 这样以后往工作区里放任何私人文件（求职记录、第三方二进制包等）都不会误传到公开仓库。
+
+/*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/LICENSE
+!/boss-haitu-free/
+!/tools/
+
+# 扩展内部的本地备份，不进仓库
+/boss-haitu-free/.backup/
+
+# 系统 / 编辑器垃圾
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+node_modules/
+*.log
