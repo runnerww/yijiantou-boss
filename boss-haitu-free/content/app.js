@@ -13,7 +13,7 @@
   window.__HT_LOADED__ = true;
 
   // 版本号:面板标题 + 控制台 + 运行日志都会带上,用来确认新代码是否真的生效
-  const VERSION = '1.1.0';
+  const VERSION = '1.1.1';
   try { console.log('%c[一键投 Boss] v' + VERSION + ' 内容脚本已加载', 'color:#2b6cb0;font-weight:bold'); } catch (e) { /* ignore */ }
 
   const K = globalThis.HT_KEYS;
@@ -60,10 +60,24 @@
       bubbles: true, cancelable: true, view: window,
       clientX: r.left + r.width / 2, clientY: r.top + r.height / 2
     };
-    el.dispatchEvent(new MouseEvent('mousedown', opts));
-    el.dispatchEvent(new MouseEvent('mouseup', opts));
-    el.dispatchEvent(new MouseEvent('click', opts));
-    if (typeof el.click === 'function') { try { el.click(); } catch (e) { /* ignore */ } }
+
+    /* 关键:BOSS 的「立即沟通」经常就是一个带 href 的 <a>(href="/web/geek/chat?...")。
+       el.click() 是浏览器级激活,会真的执行跳转 —— 表现出来就是「投一个就跳进聊天页」。
+       React 的 onClick 挂在冒泡阶段,所以这里在捕获阶段只 preventDefault(取消导航),
+       不 stopPropagation —— 沟通请求照常发出,页面留在列表。 */
+    const anchor = el.closest ? el.closest('a[href]') : null;
+    const swallow = (ev) => {
+      if (anchor && ev.target && anchor.contains(ev.target)) ev.preventDefault();
+    };
+    if (anchor) document.addEventListener('click', swallow, true);
+    try {
+      el.dispatchEvent(new MouseEvent('mousedown', opts));
+      el.dispatchEvent(new MouseEvent('mouseup', opts));
+      el.dispatchEvent(new MouseEvent('click', opts));
+      if (typeof el.click === 'function') { try { el.click(); } catch (e) { /* ignore */ } }
+    } finally {
+      if (anchor) setTimeout(() => document.removeEventListener('click', swallow, true), 0);
+    }
   }
 
   /* 带重试的异步执行器
@@ -1931,9 +1945,42 @@
     return list.includes('不限') || list.includes(status);
   }
 
+  /* 找「留在此页」按钮。
+     类名每次都可能变(BOSS 改版),但「留在此页」这四个字极少变,所以按文本找,
+     并且先查类名(快) → 再查弹窗容器(准) → 最后查全页 button/a(兜底)。 */
+  function findStayButton(deep) {
+    let hit = qa(SEL.STAY_BTN).find((b) => visible(b) && /留在此页/.test(txt(b)));
+    if (hit) return hit;
+
+    const scopes = qa('[class*="dialog"], [class*="modal"], [class*="popup"], [role="dialog"]');
+    for (const s of scopes) {
+      if (!visible(s)) continue;
+      const b = qa('button, a, span, div', s)
+        .find((el) => visible(el) && txt(el) === '留在此页');
+      if (b) return b;
+    }
+
+    if (!deep) return null;          // 全页扫描比较重,只在弹窗还没出现时才做
+    return qa('button, a').find((el) => visible(el) && txt(el) === '留在此页') || null;
+  }
+
+  /* 点完「立即沟通」之后的状态:
+     stayed  = 弹窗出现并点了「留在此页」,页面仍在列表
+     jumped  = 页面被带去聊天页(BOSS 新版直接跳转,没有弹窗)
+     none    = 既没弹窗也没跳(通常是已沟通/被限流) */
   async function handleStayModal() {
-    const btn = await waitFor(() => qa(SEL.STAY_BTN).find((b) => txt(b) === '留在此页'), 4000);
-    if (btn) { simulateClick(btn); await sleep(settings.opDelay); }
+    const t0 = Date.now();
+    while (Date.now() - t0 < 3500) {
+      if (!isJobsPage()) return 'jumped';
+      const btn = findStayButton(Date.now() - t0 > 800);
+      if (btn) {
+        simulateClick(btn);
+        await sleep(400);
+        return isJobsPage() ? 'stayed' : 'jumped';
+      }
+      await sleep(120);
+    }
+    return isJobsPage() ? 'none' : 'jumped';
   }
 
   async function applyToCard(card) {
@@ -1952,9 +1999,29 @@
     const t = txt(btn);
     if (t !== '立即沟通') return { outcome: 'already', detail: t || '已沟通' };
     simulateClick(btn);
-    await sleep(settings.opDelay);
-    await handleStayModal();
+    const after = await handleStayModal();   // 边等弹窗边盯着 URL,一旦被带走立刻返回
+    if (after === 'jumped') return { outcome: 'jumped' };
     return { outcome: 'success' };
+  }
+
+  /* 被带去聊天页之后的补救:退回列表,继续投剩下的。
+     history.back() 优先(SPA 内退回,状态全在);退不回来就整页导航回列表,
+     并写入 ht_pending,让 init() 在新页面里自动接着跑。 */
+  async function recoverToList(listUrl) {
+    try { history.back(); } catch (e) { /* ignore */ }
+    let ok = await waitFor(isJobsPage, 6000);
+    if (!ok) {
+      log('⚠️ 无法退回列表,正在重新打开列表页(会自动继续)…');
+      try {
+        sessionStorage.setItem('ht_pending', 'jobs');
+        sessionStorage.setItem('ht_list_url', listUrl);
+      } catch (e) { /* ignore */ }
+      location.href = listUrl;
+      return false;
+    }
+    await waitFor(() => getCards().cards.length > 0, 6000);
+    await sleep(800);
+    return true;
   }
 
   async function runJobs() {
@@ -1964,7 +2031,9 @@
     if (stopFlag) { renderButtons(); return; }
     const { cards, selector } = getCards();
     log(`识别到 ${cards.length} 个职位卡片(${selector || '无匹配选择器'})`);
-    const list = collectJobList();
+    const listUrl = location.href;                 // 被跳走之后要退回到这个地址
+    let list = collectJobList();
+    let jumpCount = 0;
     logFilterReport();
     if (!list.length) {
       log('没有符合条件的职位。点「设置 → 诊断页面」可查看识别详情。');
@@ -1977,8 +2046,7 @@
     for (let i = 0; i < list.length; i++) {
       if (stopFlag || !state.running) break;
       await whilePaused();
-      const card = list[i];
-      const key = jobKey(card);
+      const card = list[i];      const key = jobKey(card);
       if (sets.applied.has(key)) continue;
       const f = cardFields(card);
       card.scrollIntoView({ block: 'center' });
@@ -1991,6 +2059,32 @@
         2,                          // 最多重试 2 次
         800                         // 每次间隔 800ms
       );
+
+      if (res.outcome === 'jumped') {
+        /* 点完「立即沟通」页面被 BOSS 直接带去了聊天页。
+           跳转本身就意味着这条沟通已经发出去了,先记成功,再退回列表接着投。
+           列表回退后 DOM 会被 React 整体重渲染,旧引用全部失效,
+           所以重新采集一次并从头扫 —— 已投过的靠 sets.applied 跳过,不会重复。 */
+        jumpCount += 1;
+        sets.applied.add(key); await persistSets();
+        await addRecord({ job: f.title, company: f.company || f.addr, status: '已沟通' });
+        await incToday();
+        await bumpStats(true);
+        log(`✅ 已沟通 · ${f.title} · 页面被带到聊天页,正在退回列表`);
+        renderRecords();
+
+        if (jumpCount === 3) {
+          log('⚠️ 已经连续 3 次被跳转 —— 说明「留在此页」的拦截没生效。');
+          log('   投递仍会继续(每次自动退回),但速度会变慢,建议把这份日志发给开发者。');
+        }
+
+        const back = await recoverToList(listUrl);
+        if (!back) return;              // 退不回来 → 整页导航,ht_pending 会自动续跑
+        list = collectJobList();
+        i = -1;                          // 从头重扫,已投的自动跳过
+        log(`↩️ 已退回列表,继续投递(剩余 ${list.filter((c) => !sets.applied.has(jobKey(c))).length} 个待投)`);
+        continue;
+      }
 
       if (res.outcome === 'success') {
         sets.applied.add(key); await persistSets();
