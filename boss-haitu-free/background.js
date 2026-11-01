@@ -38,23 +38,102 @@ async function updateBadge() {
   } catch (e) { /* ignore */ }
 }
 
-/* 点击工具栏图标 → 通知当前标签页切换面板 */
+/* ---------------- 工具栏图标:点一下就要能看到面板 ----------------
+   三级兜底,任一层成功即返回:
+   ① 消息通道(首选,面板会顺带刷新统计与记录)
+   ② 页面里压根没有面板 → 主动注入脚本,等它建好再发一次消息
+   ③ 注入成功但消息仍不通 → 直接改 DOM 把面板从收起态展开
+   结果会在图标上闪一下 ✓ / ! ,不用再猜「点了到底有没有反应」。
+*/
+function sendToTab(tabId, msg) {
+  return new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(tabId, msg, (resp) => {
+        if (chrome.runtime.lastError) return resolve(null);
+        resolve(resp || null);
+      });
+    } catch (e) { resolve(null); }
+  });
+}
+
+async function hasPanel(tabId) {
+  try {
+    const r = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => !!(document.querySelector && document.querySelector('.ht-root'))
+    });
+    return !!(r && r[0] && r[0].result);
+  } catch (e) { return false; }
+}
+
+async function injectPanel(tabId) {
+  if (!chrome.scripting) return false;
+  try {
+    await chrome.scripting.insertCSS({ target: { tabId }, files: ['content/app.css'] });
+  } catch (e) { /* 重复插入会报错,忽略 */ }
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['common/constants.js', 'content/app.js']
+    });
+    return true;
+  } catch (e) { return false; }
+}
+
+/* 兜底:不经过消息,直接展开,并把它拉回视口内(位置记忆可能把它留在屏幕外) */
+async function forceOpenDom(tabId) {
+  try {
+    const r = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const root = document.querySelector('.ht-root');
+        if (!root) return false;
+        root.classList.remove('ht-collapsed');
+        const b = root.getBoundingClientRect();
+        if (b.right < 48 || b.bottom < 48 || b.left > innerWidth - 48 || b.top > innerHeight - 48) {
+          root.style.left = '';
+          root.style.top = '';
+          root.style.right = '18px';
+          root.style.bottom = '18px';
+        }
+        return true;
+      }
+    });
+    return !!(r && r[0] && r[0].result);
+  } catch (e) { return false; }
+}
+
+let badgeTimer = null;
+function flashBadge(ok) {
+  try {
+    chrome.action.setBadgeBackgroundColor({ color: ok ? '#0F9D58' : '#D93A3A' });
+    chrome.action.setBadgeText({ text: ok ? '✓' : '!' });
+    clearTimeout(badgeTimer);
+    badgeTimer = setTimeout(() => { updateBadge(); }, 1400);
+  } catch (e) { /* ignore */ }
+}
+
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab || !tab.id) return;
-  try {
-    await chrome.tabs.sendMessage(tab.id, { type: MSG.TOGGLE_PANEL });
-  } catch (e) {
-    // 页面还没注入内容脚本(例如未刷新),尝试主动注入
-    try {
-      if (!chrome.scripting) return;
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ['common/constants.js', 'content/app.js']
-      });
-      await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['content/app.css'] });
-      await chrome.tabs.sendMessage(tab.id, { type: MSG.TOGGLE_PANEL });
-    } catch (e2) { /* ignore */ }
+  const tabId = tab.id;
+
+  /* ① 首选:走内容脚本的消息通道 */
+  const r1 = await sendToTab(tabId, { type: MSG.OPEN_PANEL });
+  if (r1 && r1.ok) return flashBadge(true);
+
+  /* ② 页面里没有面板 → 主动注入,等它建好再试 */
+  if (!(await hasPanel(tabId))) {
+    if (!(await injectPanel(tabId))) return flashBadge(false);
+    for (let i = 0; i < 8; i++) {
+      await new Promise((r) => setTimeout(r, 150));
+      if (await hasPanel(tabId)) break;
+    }
+    const r2 = await sendToTab(tabId, { type: MSG.OPEN_PANEL });
+    if (r2 && r2.ok) return flashBadge(true);
   }
+
+  /* ③ 最后兜底:直接改 DOM */
+  flashBadge(await forceOpenDom(tabId));
 });
 
 /* 消息:内容脚本上报成功计数 */

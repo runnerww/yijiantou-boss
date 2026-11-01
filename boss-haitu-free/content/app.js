@@ -13,7 +13,7 @@
   window.__HT_LOADED__ = true;
 
   // 版本号:面板标题 + 控制台 + 运行日志都会带上,用来确认新代码是否真的生效
-  const VERSION = '1.0.10';
+  const VERSION = '1.1.0';
   try { console.log('%c[一键投 Boss] v' + VERSION + ' 内容脚本已加载', 'color:#2b6cb0;font-weight:bold'); } catch (e) { /* ignore */ }
 
   const K = globalThis.HT_KEYS;
@@ -658,6 +658,24 @@
     const collapsed = !open;
     panel.classList.toggle('ht-collapsed', collapsed);
     if (!collapsed) { renderRecords(); renderHomeStats(); renderFilterSummary(); syncFormControls(); }
+  }
+
+  /* 工具栏图标点击 → 强制展开(幂等)。和 togglePanel 的区别:
+     已展开时再点不会把它关掉 —— 用户点图标就是要看到面板。
+     顺便修一个隐蔽问题:位置记忆可能把面板留在视口外(缩过窗口/换过显示器),
+     这时就算展开了也看不见,所以先判断是否跑出可视区并复位。 */
+  function openPanel() {
+    if (!panel) buildPanel();
+    if (!panel) return false;
+    try {
+      const r = panel.getBoundingClientRect();
+      const offscreen = r.right < 48 || r.bottom < 48 ||
+        r.left > window.innerWidth - 48 || r.top > window.innerHeight - 48;
+      if (offscreen) resetPos();
+    } catch (e) { /* ignore */ }
+    panel.classList.remove('ht-collapsed');
+    renderRecords(); renderHomeStats(); renderFilterSummary(); syncFormControls();
+    return true;
   }
 
   /* ============================ 渲染 ============================ */
@@ -2164,7 +2182,23 @@
 
   /* ============================ 消息与初始化 ============================ */
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg && msg.type === MSG.TOGGLE_PANEL) {
+    if (!msg || !msg.type) return;
+
+    /* 探活:后台脚本用它确认「这个页面里到底有没有内容脚本」 */
+    if (msg.type === MSG.PING) {
+      sendResponse({ ok: true, version: VERSION, hasPanel: !!panel });
+      return true;
+    }
+
+    /* 工具栏图标点击 → 打开(不会关) */
+    if (msg.type === MSG.OPEN_PANEL) {
+      const ok = openPanel();
+      sendResponse({ ok: ok, already: !panel ? false : !panel.classList.contains('ht-collapsed') });
+      return true;
+    }
+
+    /* 旧行为:切换(面板左上角胶囊用它) */
+    if (msg.type === MSG.TOGGLE_PANEL) {
       buildPanel();
       togglePanel(panel.classList.contains('ht-collapsed'));
       sendResponse({ ok: true });

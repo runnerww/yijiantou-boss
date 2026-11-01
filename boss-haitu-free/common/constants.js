@@ -19,7 +19,9 @@
   root.HT_AUTHOR = '王智纬 / wangzhiwei';
 
   root.HT_MSG = {
-    TOGGLE_PANEL: 'ht:toggle-panel',
+    TOGGLE_PANEL: 'ht:toggle-panel',   // 点面板上的胶囊 / 旧版工具栏点击
+    OPEN_PANEL: 'ht:open-panel',       // 工具栏图标点击：强制展开(幂等,不会误关)
+    PING: 'ht:ping',                   // 探活：确认内容脚本是否还在这个页面里
     GET_STATE: 'ht:get-state',
     STATE_CHANGED: 'ht:state-changed'
   };
