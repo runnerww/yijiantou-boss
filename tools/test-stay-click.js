@@ -37,7 +37,7 @@ function sliceFn(name) {
   process.exit(1);
 }
 
-const blocks = ['simulateClick', 'findStayButton', 'handleStayModal', 'sameJob'].map(sliceFn).join('\n\n');
+const blocks = ['simulateClick', 'waitFor', 'findStayButton', 'handleStayModal', 'sameJob'].map(sliceFn).join('\n\n');
 
 /* ---------------- mock DOM ---------------- */
 const MOCK = {
@@ -118,6 +118,7 @@ const isJobsPage = () => MOCK.path.includes('/web/geek/job');
 
 const api = new Function('qa', 'q', 'txt', 'visible', 'sleep', 'SEL', 'isJobsPage',
   'document', 'window', 'MouseEvent', `
+  const settings = { opDelay: 20 };
   ${blocks}
   return { simulateClick, findStayButton, handleStayModal, sameJob };
 `)(qa, q, txt, visible, sleep, SEL, isJobsPage, DOC, window, MouseEvent);
@@ -136,17 +137,14 @@ function reset() {
 }
 
 (async function run() {
-  /* 1. 带 href 的 <a>:事件被取消,不导航,但 click 照发 */
-  console.log('\n[1] <a href="/web/geek/chat"> 只发事件、不导航');
+  /* 1. 带 href 的 <a>:不额外拦截,和 1.0.10 完全一致 */
+  console.log('\n[1] <a href="/web/geek/chat"> 不额外拦截(保持 1.0.10 行为)');
   reset();
   const anchor = makeEl({ tag: 'a', href: '/web/geek/chat?jobId=1' });
   const btn = makeEl({ tag: 'a', text: '立即沟通', anchor });
   api.simulateClick(btn);
-  check('点击被 preventDefault', btn.prevented === 1, btn.prevented);
-  check('没有发生导航', btn.navigated === 0, btn.navigated);
-  check('click 仍然派发一次(React 收得到)', btn.clicked === 1, btn.clicked);
-  await sleep(30);
-  check('捕获监听器已撤销', DOC.capture.length === 0, DOC.capture.length + ' 个残留');
+  check('没有额外 preventDefault', btn.prevented === 0, btn.prevented);
+  check('click 照常派发一次(React 收得到)', btn.clicked === 1, btn.clicked);
 
   /* 2. 普通 <button>:照常点,不拦 */
   console.log('\n[2] 普通 <button> 照常点击');
@@ -175,26 +173,38 @@ function reset() {
   check('结果 stayed', r4 === 'stayed', r4);
   check('兜底按钮被点掉', stayText.clicked === 1, stayText.clicked);
 
-  /* 5. 没有弹窗、页面被带走 → 立刻 jumped,不傻等 */
-  console.log('\n[5] 无弹窗且跳到聊天页 → jumped');
+  /* 5. ★本次回归的核心:BOSS 先改 URL、再弹「留在此页」。
+        1.1.1 里一看到 URL 变了就判 jumped 提前跑路,等于放弃点弹窗 → 页面留在聊天页。
+        1.0.10 是等满 4 秒的,所以「能用」。这里锁住:URL 变了也必须继续点弹窗。 */
+  console.log('\n[5] URL 已跳到聊天页、弹窗随后出现 → 仍然点掉(回归锁)');
+  reset();
+  const stayAfterJump = makeEl({ text: '留在此页', onClick: () => { MOCK.path = '/web/geek/job'; } });
+  MOCK.stay = stayAfterJump;
+  MOCK.path = '/web/geek/chat';          // 模拟「URL 已经先跳走了」
+  const r5 = await api.handleStayModal();
+  check('仍然点了「留在此页」', stayAfterJump.clicked === 1, stayAfterJump.clicked);
+  check('点完回到列表 → stayed', r5 === 'stayed', r5);
+
+  /* 6. 没有弹窗、页面被带走 → 等满 4 秒后判定 jumped(不提前放弃) */
+  console.log('\n[6] 无弹窗且已跳到聊天页 → 等满 4 秒才 jumped');
   reset();
   const jumpBtn = makeEl({ text: '立即沟通' });
   MOCK.onAfterClick = () => { MOCK.path = '/web/geek/chat'; };
   const t0 = Date.now();
   api.simulateClick(jumpBtn);
-  const r5 = await api.handleStayModal();
-  const cost = Date.now() - t0;
-  check('结果 jumped', r5 === 'jumped', r5);
-  check('没有等满 3.5 秒', cost < 1500, cost + 'ms');
-
-  /* 6. 什么都发生 → none */
-  console.log('\n[6] 既无弹窗也不跳 → none');
-  reset();
   const r6 = await api.handleStayModal();
-  check('结果 none', r6 === 'none', r6);
+  const cost = Date.now() - t0;
+  check('结果 jumped', r6 === 'jumped', r6);
+  check('等满窗口才判定(不提前跑路)', cost >= 3500, cost + 'ms');
 
-  /* 7. 卡片标题 vs 详情标题:防止详情还没切换就点了,把招呼发给上一个人 */
-  console.log('\n[7] sameJob 详情标题校验');
+  /* 7. 什么都没发生 → none */
+  console.log('\n[7] 既无弹窗也不跳 → none');
+  reset();
+  const r7 = await api.handleStayModal();
+  check('结果 none', r7 === 'none', r7);
+
+  /* 8. 卡片标题 vs 详情标题:诊断用,判断详情有没有切到目标职位 */
+  console.log('\n[8] sameJob 详情标题校验');
   check('完全一致 → 同一个', api.sameJob('品牌PM', '品牌PM') === true);
   check('详情带后缀(薪资/标签) → 同一个', api.sameJob('品牌PM', '品牌PM15-20K上海') === true);
   check('完全不同 → 不是同一个', api.sameJob('品牌PM', '海外kol运营') === false);

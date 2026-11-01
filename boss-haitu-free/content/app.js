@@ -13,7 +13,7 @@
   window.__HT_LOADED__ = true;
 
   // 版本号:面板标题 + 控制台 + 运行日志都会带上,用来确认新代码是否真的生效
-  const VERSION = '1.1.2';
+  const VERSION = '1.1.3';
   try { console.log('%c[一键投 Boss] v' + VERSION + ' 内容脚本已加载', 'color:#2b6cb0;font-weight:bold'); } catch (e) { /* ignore */ }
 
   const K = globalThis.HT_KEYS;
@@ -60,24 +60,10 @@
       bubbles: true, cancelable: true, view: window,
       clientX: r.left + r.width / 2, clientY: r.top + r.height / 2
     };
-
-    /* 关键:BOSS 的「立即沟通」经常就是一个带 href 的 <a>(href="/web/geek/chat?...")。
-       el.click() 是浏览器级激活,会真的执行跳转 —— 表现出来就是「投一个就跳进聊天页」。
-       React 的 onClick 挂在冒泡阶段,所以这里在捕获阶段只 preventDefault(取消导航),
-       不 stopPropagation —— 沟通请求照常发出,页面留在列表。 */
-    const anchor = el.closest ? el.closest('a[href]') : null;
-    const swallow = (ev) => {
-      if (anchor && ev.target && anchor.contains(ev.target)) ev.preventDefault();
-    };
-    if (anchor) document.addEventListener('click', swallow, true);
-    try {
-      el.dispatchEvent(new MouseEvent('mousedown', opts));
-      el.dispatchEvent(new MouseEvent('mouseup', opts));
-      el.dispatchEvent(new MouseEvent('click', opts));
-      if (typeof el.click === 'function') { try { el.click(); } catch (e) { /* ignore */ } }
-    } finally {
-      if (anchor) setTimeout(() => document.removeEventListener('click', swallow, true), 0);
-    }
+    el.dispatchEvent(new MouseEvent('mousedown', opts));
+    el.dispatchEvent(new MouseEvent('mouseup', opts));
+    el.dispatchEvent(new MouseEvent('click', opts));
+    if (typeof el.click === 'function') { try { el.click(); } catch (e) { /* ignore */ } }
   }
 
   /* 带重试的异步执行器
@@ -1912,6 +1898,7 @@
         ? boxes.map((x) => '.' + String(x.className || '').split(' ').filter(Boolean)[0]).join(', ')
         : '未找到'));
       log('详情标题 = ' + (detailTitle() || '未找到'));
+      log('详情标题与首卡一致 = ' + (sameJob((cardFields(cards[0]) || {}).title, detailTitle()) ? '是' : '否'));
       const db = findDetailChatButton();
       log('详情沟通按钮 = ' + (db ? `${txt(db)}(<${String(db.tagName || '').toLowerCase()}>)` : '未找到'));
       log('活跃状态识别 = ' + getActiveStatus());
@@ -2012,23 +1999,16 @@
     return qa('button, a').find((el) => visible(el) && txt(el) === '留在此页') || null;
   }
 
-  /* 点完「立即沟通」之后的状态:
-     stayed  = 弹窗出现并点了「留在此页」,页面仍在列表
-     jumped  = 页面被带去聊天页(BOSS 新版直接跳转,没有弹窗)
-     none    = 既没弹窗也没跳(通常是已沟通/被限流) */
+  /* 1.0.10 的原始实现:等满 4 秒找「留在此页」并点掉。
+     这里只把「只认 .default-btn.cancel-btn 一个 class」放宽成按文本找,
+     其余节奏(t 4s / 200ms)和 1.0.10 完全一致 —— 不再提前判定「已经跳走」,
+     因为 BOSS 是「先跳 URL、再弹确认框」,早退就等于放弃了把用户拉回列表的机会。 */
   async function handleStayModal() {
-    const t0 = Date.now();
-    while (Date.now() - t0 < 3500) {
-      if (!isJobsPage()) return 'jumped';
-      const btn = findStayButton(Date.now() - t0 > 800);
-      if (btn) {
-        simulateClick(btn);
-        await sleep(400);
-        return isJobsPage() ? 'stayed' : 'jumped';
-      }
-      await sleep(120);
-    }
-    return isJobsPage() ? 'none' : 'jumped';
+    const btn = await waitFor(() => findStayButton(true), 4000, 200);
+    if (!btn) return isJobsPage() ? 'none' : 'jumped';
+    simulateClick(btn);
+    await sleep(settings.opDelay);
+    return isJobsPage() ? 'stayed' : 'jumped';
   }
 
   /* 卡片标题 vs 详情标题是否同一个职位。
@@ -2044,17 +2024,18 @@
   async function applyToCard(card) {
     let btn = findCardButton(card);
     if (!btn) {
-      const title = (cardFields(card) || {}).title || '';
       simulateClick(card);
       await sleep(settings.opDelay);
-      /* 详情区异步渲染:只等「按钮出现」有可能读到的是上一个职位的详情,
-         于是把招呼发给错的人。所以等「标题对上」+「按钮出现」;
-         标题读不到时退化成只等按钮,保持旧行为,不至于卡死。 */
-      btn = await waitFor(() => {
-        const t = detailTitle();
-        if (t && !sameJob(title, t)) return null;
-        return findDetailChatButton();
-      }, 8000);
+      /* 回到 1.0.10 的等待方式:6 秒内等详情区的沟通按钮出现。
+         这里只多加了一层「按文本找」的兜底(class 改版时还能命中),
+         不加标题校验 —— 校验会让改版后一直等不到,反而一个都投不出去。 */
+      btn = await waitFor(
+        () => q('.job-detail-box .op-btn.op-btn-chat')
+          || q('.job-detail-box .op-btn-chat')
+          || qa('a.op-btn-chat').find(visible)
+          || findDetailChatButton(),
+        6000
+      );
     }
     const status = getActiveStatus();
     if (status !== '未知' && !activeMatched(status)) return { outcome: 'status', detail: status };
@@ -2062,13 +2043,13 @@
     const t = txt(btn);
     if (t !== '立即沟通') return { outcome: 'already', detail: t || '已沟通' };
     simulateClick(btn);
-    const after = await handleStayModal();   // 边等弹窗边盯着 URL,一旦被带走立刻返回
-    if (after === 'jumped') return { outcome: 'jumped' };
-    return { outcome: 'success' };
+    await sleep(settings.opDelay);
+    const after = await handleStayModal();
+    return after === 'jumped' ? { outcome: 'jumped' } : { outcome: 'success' };
   }
 
-  /* 被带去聊天页之后的补救:退回列表,继续投剩下的。
-     history.back() 优先(SPA 内退回,状态全在);退不回来就整页导航回列表,
+  /* 兜底:万一还是被带到了聊天页,退回列表继续投剩下的。
+     优先 history.back()(SPA 内退回,状态都在);退不回来就整页导航回列表,
      并写入 ht_pending,让 init() 在新页面里自动接着跑。 */
   async function recoverToList(listUrl) {
     try { history.back(); } catch (e) { /* ignore */ }
