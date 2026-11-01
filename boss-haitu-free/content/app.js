@@ -13,7 +13,7 @@
   window.__HT_LOADED__ = true;
 
   // 版本号:面板标题 + 控制台 + 运行日志都会带上,用来确认新代码是否真的生效
-  const VERSION = '1.1.1';
+  const VERSION = '1.1.2';
   try { console.log('%c[一键投 Boss] v' + VERSION + ' 内容脚本已加载', 'color:#2b6cb0;font-weight:bold'); } catch (e) { /* ignore */ }
 
   const K = globalThis.HT_KEYS;
@@ -1293,6 +1293,36 @@
     return card.querySelector('a.op-btn-chat, .op-btn-chat, button.op-btn-chat, .btn-startchat, .startchat-btn');
   }
 
+  /* 右侧详情区。BOSS 现在（新版列表页）卡片里已经没有沟通按钮了，
+     必须先点卡片、再点右侧详情里的「立即沟通」，所以下面两个函数是投递的主路径。 */
+  function detailBoxes() {
+    return qa('.job-detail-box, .job-detail, .job-detail-container, [class*="job-detail"]')
+      .filter((el) => visible(el));
+  }
+  function detailTitle() {
+    for (const box of detailBoxes()) {
+      const el = q('.job-name', box) || q('h1', box) || q('.name', box);
+      const t = txt(el);
+      if (t) return t;
+    }
+    return '';
+  }
+  /* 按文本找详情里的沟通按钮:class 会变,「立即沟通」四个字很少变。
+     注意「继续沟通」「已投递」也算命中 —— 交给调用方判断状态,不要在这里筛掉。 */
+  function findDetailChatButton() {
+    const byCls = q('.job-detail-box .op-btn-chat') || q('.job-detail-box .op-btn.op-btn-chat');
+    if (byCls && visible(byCls)) return byCls;
+    const byCls2 = qa('a.op-btn-chat, .op-btn-chat, .btn-startchat').find(visible);
+    if (byCls2) return byCls2;
+
+    const RE = /^(立即沟通|继续沟通|已投递|沟通中)$/;
+    for (const box of detailBoxes()) {
+      const b = qa('a, button', box).find((el) => visible(el) && RE.test(txt(el)));
+      if (b) return b;
+    }
+    return qa('a, button').find((el) => visible(el) && RE.test(txt(el))) || null;
+  }
+
   async function autoScrollJobList() {
     setPhase('scanning', '加载岗位上…');
     const listEl = getListEl();
@@ -1874,7 +1904,17 @@
       const f = cardFields(cards[0]);
       log('解析 → 职位:' + f.title + ' / 地址:' + f.addr + ' / 薪资:' + (f.salary ? f.salary.min + '-' + f.salary.max + 'K' : '无') + ' / 规模:' + (f.size || '无'));
       const b = findCardButton(cards[0]);
-      log('首卡片沟通按钮 = ' + (b ? txt(b) : '无'));
+      log('首卡片沟通按钮 = ' + (b ? txt(b) : '无(需点开卡片,读右侧详情)'));
+      /* 新版列表页卡片里没有按钮,投递靠「点卡片 → 右侧详情 → 立即沟通」,
+         所以详情区识别不出来时,投递会全部卡在「未找到沟通按钮」。这一段就是为它准备的。 */
+      const boxes = detailBoxes();
+      log('详情容器 → ' + (boxes.length
+        ? boxes.map((x) => '.' + String(x.className || '').split(' ').filter(Boolean)[0]).join(', ')
+        : '未找到'));
+      log('详情标题 = ' + (detailTitle() || '未找到'));
+      const db = findDetailChatButton();
+      log('详情沟通按钮 = ' + (db ? `${txt(db)}(<${String(db.tagName || '').toLowerCase()}>)` : '未找到'));
+      log('活跃状态识别 = ' + getActiveStatus());
     }
 
 
@@ -1935,14 +1975,22 @@
   }
 
   function getActiveStatus() {
-    const online = q(SEL.ONLINE_TAG);
-    if (online && txt(online) === '在线') return '在线';
+    /* 新版列表页的在线标记是个纯图标 span.boss-online-icon,里面没有文字 */
+    const online = q(SEL.ONLINE_TAG) || q('.boss-online-icon');
+    if (online) {
+      const t = txt(online);
+      return t || '在线';
+    }
     const at = q(SEL.ACTIVE_TIME);
     return at ? txt(at) || '未知' : '未知';
   }
   function activeMatched(status) {
     const list = settings.activeStatus || ['不限'];
-    return list.includes('不限') || list.includes(status);
+    if (list.includes('不限') || list.includes(status)) return true;
+    /* 「在线」比任何活跃档都更活跃:只要用户勾了任意具体档位就放行,
+       否则会把正在线的 HR 全过滤掉(卡片上只有图标,读不到"刚刚活跃"这种文字) */
+    if (status === '在线' && list.some((s) => s && s !== '不限')) return true;
+    return false;
   }
 
   /* 找「留在此页」按钮。
@@ -1983,15 +2031,30 @@
     return isJobsPage() ? 'none' : 'jumped';
   }
 
+  /* 卡片标题 vs 详情标题是否同一个职位。
+     取不到任一边就放行(true),避免因为改版把整条投递链路卡死。 */
+  function sameJob(cardTitle, detailTitleText) {
+    const a = String(cardTitle || '').replace(/\s+/g, '');
+    const b = String(detailTitleText || '').replace(/\s+/g, '');
+    if (!a || !b) return true;
+    return a === b || b.indexOf(a) === 0 || a.indexOf(b) === 0 ||
+      (a.length >= 6 && b.indexOf(a.slice(0, 6)) >= 0);
+  }
+
   async function applyToCard(card) {
     let btn = findCardButton(card);
     if (!btn) {
+      const title = (cardFields(card) || {}).title || '';
       simulateClick(card);
       await sleep(settings.opDelay);
-      btn = await waitFor(
-        () => q('.job-detail-box .op-btn.op-btn-chat') || q('.job-detail-box .op-btn-chat') || qa('a.op-btn-chat').find(visible),
-        6000
-      );
+      /* 详情区异步渲染:只等「按钮出现」有可能读到的是上一个职位的详情,
+         于是把招呼发给错的人。所以等「标题对上」+「按钮出现」;
+         标题读不到时退化成只等按钮,保持旧行为,不至于卡死。 */
+      btn = await waitFor(() => {
+        const t = detailTitle();
+        if (t && !sameJob(title, t)) return null;
+        return findDetailChatButton();
+      }, 8000);
     }
     const status = getActiveStatus();
     if (status !== '未知' && !activeMatched(status)) return { outcome: 'status', detail: status };

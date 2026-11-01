@@ -111,6 +111,8 @@ https://www.zhipin.com/web/geek/job?query=AI%20应用开发&city=101210100
 > ① 点击时**只派发事件、取消默认导航**——沟通请求照常发出去，页面留在列表；
 > ② 万一还是被带走，会在 3.5 秒内识别出来，自动 `history.back()` 退回列表、重新采集卡片继续投，已投过的靠本地记录跳过，不会重复。
 
+> **关于「卡片上没有沟通按钮」**：新版列表页把按钮收到了右侧详情里，所以扩展是「点开卡片 → 等右侧详情加载 → 点里面的『立即沟通』」。为避免详情还没切换过去就点了，点之前会**核对详情标题与卡片标题是否同一个职位**，不一致就继续等——宁可慢一点，也不把招呼发给错的人。
+
 ### ⑤ 聊天页：招呼语 / 简历 / 图片
 
 投递完成后切到聊天页（地址含 `/web/geek/chat`），面板会换成沟通模式。先在**设置**页把这些配好：
@@ -217,7 +219,7 @@ boss-haitu-free/
 tools/
 ├── test-salary-parse.js   薪资解析回归测试（69 个用例）
 ├── test-salary-filter.js  筛选逻辑端到端测试（34 项断言）
-└── test-stay-click.js     「点沟通会跳走」回归测试（13 项断言）
+└── test-stay-click.js     「点沟通会跳走」回归测试（18 项断言）
 docs/
 ├── images/                文档配图（PNG）
 └── mock/                  配图源文件：直接引用真实的 content/app.css 复现面板，
@@ -235,7 +237,7 @@ docs/
 ```bash
 node tools/test-salary-parse.js    # 69/69
 node tools/test-salary-filter.js   # 34/34
-node tools/test-stay-click.js      # 13/13
+node tools/test-stay-click.js      # 18/18
 ```
 
 覆盖的场景包括：月/年/日/时薪与千/万/元换算、全角符号、13 薪后缀、开放上限、面议、

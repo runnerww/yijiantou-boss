@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "一键投 Boss",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "在 BOSS 直聘网页上批量一键投递:自动打招呼、发送招呼语、自动发简历、按招聘者状态筛选。数据全部保存在本地。",
   "author": "王智纬/wangzhiwei",
   "permissions": [

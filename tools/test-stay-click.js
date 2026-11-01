@@ -37,7 +37,7 @@ function sliceFn(name) {
   process.exit(1);
 }
 
-const blocks = ['simulateClick', 'findStayButton', 'handleStayModal'].map(sliceFn).join('\n\n');
+const blocks = ['simulateClick', 'findStayButton', 'handleStayModal', 'sameJob'].map(sliceFn).join('\n\n');
 
 /* ---------------- mock DOM ---------------- */
 const MOCK = {
@@ -119,7 +119,7 @@ const isJobsPage = () => MOCK.path.includes('/web/geek/job');
 const api = new Function('qa', 'q', 'txt', 'visible', 'sleep', 'SEL', 'isJobsPage',
   'document', 'window', 'MouseEvent', `
   ${blocks}
-  return { simulateClick, findStayButton, handleStayModal };
+  return { simulateClick, findStayButton, handleStayModal, sameJob };
 `)(qa, q, txt, visible, sleep, SEL, isJobsPage, DOC, window, MouseEvent);
 
 /* ---------------- 断言 ---------------- */
@@ -192,6 +192,14 @@ function reset() {
   reset();
   const r6 = await api.handleStayModal();
   check('结果 none', r6 === 'none', r6);
+
+  /* 7. 卡片标题 vs 详情标题:防止详情还没切换就点了,把招呼发给上一个人 */
+  console.log('\n[7] sameJob 详情标题校验');
+  check('完全一致 → 同一个', api.sameJob('品牌PM', '品牌PM') === true);
+  check('详情带后缀(薪资/标签) → 同一个', api.sameJob('品牌PM', '品牌PM15-20K上海') === true);
+  check('完全不同 → 不是同一个', api.sameJob('品牌PM', '海外kol运营') === false);
+  check('取不到详情标题 → 放行', api.sameJob('品牌PM', '') === true);
+  check('取不到卡片标题 → 放行', api.sameJob('', '海外kol运营') === true);
 
   console.log(`\n${pass}/${pass + fail} 通过` + (fail ? `,${fail} 失败` : ''));
   process.exit(fail ? 1 : 0);
